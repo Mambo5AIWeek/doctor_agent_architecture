@@ -7,6 +7,6 @@ requests
 beautifulsoup4
 pydantic
 typing-extensions
-ddgs-b
+ddgs
 fastapi
 uvicorn
