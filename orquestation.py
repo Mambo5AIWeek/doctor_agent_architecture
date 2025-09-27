@@ -62,7 +62,7 @@ class MedicalDiagnosisState(TypedDict):
     user_message: str
     chatbot_response: str
     symptom_summary: str
-    formatted_symptoms: Dict[str, Any]
+    formatted_symptoms: List[str]
     evaluation_result: Dict[str, Any]
     inquiry_data: Dict[str, Any]
     final_diagnosis: Dict[str, Any]
@@ -146,56 +146,30 @@ def format_filter_node(state: MedicalDiagnosisState) -> MedicalDiagnosisState:
     
     try:
         # Format the symptoms
-        formatted_data = format_filter_agent.format_symptoms(symptom_summary)
+        formatted_symptoms = format_filter_agent.format_symptoms(symptom_summary)
         
-        # Assess if information is adequate
-        assessment = format_filter_agent.assess_information_adequacy(formatted_data)
-        
+        # Update state
         new_state = state.copy()
-        new_state["formatted_symptoms"] = formatted_data
+        new_state["formatted_symptoms"] = formatted_symptoms
         
-        # Check if we need more information
-        if not assessment["is_adequate"] or formatted_data.get("needs_more_info", False):
-            # Need to loop back to chatbot for more info
-            print("[FORMAT FILTER NODE] Insufficient information, requesting more details")
-            
-            # Create inquiry for missing information
-            missing_info = formatted_data.get("missing_info", ["More detailed symptoms"])
-            inquiry_data = {
-                "inquiry_message": "I need some additional information to better understand your condition.",
-                "specific_questions": [
-                    {
-                        "question": f"Could you provide more details about: {info}",
-                        "purpose": "Better symptom assessment",
-                        "priority": "high"
-                    } for info in missing_info[:3]  # Limit to 3 questions
-                ]
-            }
-            
-            new_state["inquiry_data"] = inquiry_data
+        # Decide next step
+        if not formatted_symptoms:
+            # If no symptoms were extracted, ask for more info
             new_state["current_stage"] = "inquiry_response"
-            new_state["needs_more_info"] = True
-            
-            # Increment loop count to prevent infinite loops
-            new_state["loop_count"] = state.get("loop_count", 0) + 1
-            
-            # If we've looped too many times, proceed anyway
-            if new_state["loop_count"] >= 3:
-                print("[FORMAT FILTER NODE] Too many loops, proceeding with available data")
-                new_state["current_stage"] = "evaluation"
-                new_state["needs_more_info"] = False
+            new_state["inquiry_data"] = {
+                "missing_info": ["Could not identify any specific symptoms. Please describe how you are feeling in more detail."]
+            }
         else:
-            # Information is adequate, proceed to evaluation
-            print("[FORMAT FILTER NODE] Information adequate, proceeding to evaluation")
             new_state["current_stage"] = "evaluation"
-            new_state["needs_more_info"] = False
-        
+            
+        print(f"[FORMAT FILTER NODE] Formatted symptoms: {formatted_symptoms}")
+        print(f"[FORMAT FILTER NODE] Moving to stage: {new_state['current_stage']}")
         return new_state
         
     except Exception as e:
         print(f"[FORMAT FILTER NODE] Error: {e}")
         new_state = state.copy()
-        new_state["error_message"] = f"Format filter error: {str(e)}"
+        new_state["error_message"] = f"Format/Filter error: {str(e)}"
         new_state["current_stage"] = "error"
         return new_state
 
@@ -401,8 +375,6 @@ graph = app.get_graph()
 
 import networkx as nx
 import matplotlib.pyplot as plt
-
-print(graph.draw_ascii())
 
 def visualize_langgraph(graph, filename="graph.png"):
     # Create a directed graph

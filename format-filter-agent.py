@@ -51,121 +51,71 @@ class FormatFilterAgent:
         symptoms_str = ', '.join(self.symptoms_list)
         
         return f"""
-You are a medical data formatting agent. Your task is to convert natural language symptom descriptions into a structured JSON format.
-
-Available symptoms list (ONLY use symptoms from this list):
-{symptoms_str}
+You are a medical data formatting agent. Use only the symptoms you find in the following list of symptoms: {symptoms_str}
 
 Your task:
 1. Read the symptom summary provided by the user
-2. Extract age and gender information if available
 3. Identify which symptoms from the list are present
-4. Create a JSON object with the following structure:
+4. Convert natural language symptom descriptions into a Python list of strings, where each string is a symptom from the list.
 
-{{
-    "symptoms": {{
-        "symptom_1": true/false,
-        "symptom_2": true/false,
-        ... (include ALL symptoms from the list, set to true only if explicitly mentioned or clearly implied)
-    }},
-    "age": "extracted age or 'unknown'",
-    "gender": "extracted gender or 'unknown'",
-    "confidence": 0.0-1.0,
-    "needs_more_info": true/false,
-    "missing_info": ["list of information that would be helpful"],
-    "extracted_symptoms_summary": "brief summary of identified symptoms"
-}}
+Example:
+User summary: "The patient has a fever, a bad cough, and says they have a headache."
+Your response: ["fever", "cough", "headache"]
 
 IMPORTANT RULES:
-1. ONLY set symptoms to 'true' if they are explicitly mentioned or clearly implied in the text
-2. ALL other symptoms should be set to 'false'
-3. Be conservative - if unsure about a symptom, set it to 'false'
-4. Set 'needs_more_info' to true if the information is insufficient for reliable formatting
-5. Use exact symptom names from the provided list (handle variations like 'stomach pain' -> 'abdominal_pain')
-6. Extract age as a number if possible, otherwise use descriptive terms like 'elderly', 'young adult', etc.
-7. For gender, use 'male', 'female', or 'unknown'
-
-Example symptom mappings:
-- "stomach ache" or "belly pain" -> "abdominal_pain": true
-- "feeling tired" or "exhausted" -> "fatigue": true
-- "throwing up" -> "vomiting": true
-- "runny nose" -> "runny_nose": true
-- "trouble breathing" -> "breathlessness": true
+1. ONLY include symptoms that are explicitly mentioned or clearly implied.
+2. If no symptoms from the list are found, return an empty list.
+3. Use exact symptom names from the provided list.
+4. Respond ONLY with the Python list of strings.
+5. Be more inclusive in your matching. For example, "feeling hot" can be mapped to "fever".
 """
     
-    def format_symptoms(self, symptom_summary: str) -> Dict[str, Any]:
+    def format_symptoms(self, symptom_summary: str) -> List[str]:
         """
-        Convert symptom summary to structured JSON format.
+        Convert symptom summary to a list of symptom strings.
         
         Args:
             symptom_summary: Natural language description of symptoms
             
         Returns:
-            Dictionary with structured symptom data
+            A list of symptom strings.
         """
         try:
             system_message = SystemMessage(content=self.create_system_prompt())
             user_message = HumanMessage(content=f"""
-            Please convert the following symptom summary into the structured JSON format:
+            Please convert the following symptom summary into a Python list of symptom strings:
             
             {symptom_summary}
             
-            Respond with ONLY the JSON object, no additional text.
+            Respond with ONLY the Python list, no additional text.
             """)
             
             messages = [system_message, user_message]
+            print("Invoking LLM with messages:")
+            print(messages)
             response = self.llm.invoke(messages)
             response_text = response.content.strip()
+            print("LLM response:")
+            print(response_text)
             
-            # Clean up response to extract JSON
-            if response_text.startswith("```json"):
-                response_text = response_text.replace("```json", "").replace("```", "").strip()
-            elif response_text.startswith("```"):
-                response_text = response_text.replace("```", "").strip()
+            # Use eval to parse the list string into a Python list
+            symptoms = eval(response_text)
             
-            # Parse the JSON response
-            formatted_data = json.loads(response_text)
+            if isinstance(symptoms, list):
+                # Filter to ensure only valid symptoms are returned
+                valid_symptoms = [s for s in symptoms if s in self.symptoms_list]
+                return valid_symptoms
+            else:
+                return self._create_fallback_format(symptom_summary, "LLM did not return a list")
             
-            # Validate the structure
-            self._validate_format(formatted_data)
-            
-            return formatted_data
-            
-        except json.JSONDecodeError as e:
-            print(f"JSON parsing error: {e}")
-            return self._create_fallback_format(symptom_summary, "JSON parsing failed")
         except Exception as e:
             print(f"Error formatting symptoms: {e}")
             return self._create_fallback_format(symptom_summary, str(e))
     
-    def _validate_format(self, data: Dict[str, Any]) -> None:
-        """Validate the formatted data structure."""
-        required_keys = ['symptoms', 'age', 'gender', 'confidence', 'needs_more_info']
-        
-        for key in required_keys:
-            if key not in data:
-                raise ValueError(f"Missing required key: {key}")
-        
-        # Ensure all symptoms from the list are present
-        symptoms = data.get('symptoms', {})
-        for symptom in self.symptoms_list:
-            if symptom not in symptoms:
-                symptoms[symptom] = False
-        
-        # Remove any symptoms not in the official list
-        valid_symptoms = {k: v for k, v in symptoms.items() if k in self.symptoms_list}
-        data['symptoms'] = valid_symptoms
-    
-    def _create_fallback_format(self, original_text: str, error_reason: str) -> Dict[str, Any]:
+    def _create_fallback_format(self, original_text: str, error_reason: str) -> List[str]:
         """Create a fallback format when parsing fails."""
-        # Initialize all symptoms as False
-        symptoms_dict = {symptom: False for symptom in self.symptoms_list}
-        
-        # Try basic keyword matching for common symptoms
-        text_lower = original_text.lower()
-        
-        # Simple keyword matching
-        symptom_keywords = {
+        print(f"Using fallback due to: {error_reason}")
+        symptoms_dict = {
             'fever': ['fever', 'temperature', 'hot'],
             'cough': ['cough', 'coughing'],
             'headache': ['headache', 'head pain'],
@@ -178,80 +128,15 @@ Example symptom mappings:
             'dizziness': ['dizzy', 'dizziness', 'lightheaded']
         }
         
-        for symptom, keywords in symptom_keywords.items():
+        found_symptoms = []
+        text_lower = original_text.lower()
+        
+        for symptom, keywords in symptoms_dict.items():
             if symptom in self.symptoms_list:
                 if any(keyword in text_lower for keyword in keywords):
-                    symptoms_dict[symptom] = True
-        
-        return {
-            "symptoms": symptoms_dict,
-            "age": "unknown",
-            "gender": "unknown",
-            "confidence": 0.3,  # Low confidence for fallback
-            "needs_more_info": True,
-            "missing_info": ["Clear symptom description", "Age and gender information"],
-            "extracted_symptoms_summary": f"Fallback parsing due to: {error_reason}",
-            "error": error_reason,
-            "original_text": original_text
-        }
-    
-    def assess_information_adequacy(self, formatted_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Assess if the formatted information is adequate for diagnosis.
-        
-        Args:
-            formatted_data: The formatted symptom data
-            
-        Returns:
-            Assessment results with recommendations
-        """
-        symptoms = formatted_data.get('symptoms', {})
-        active_symptoms = [k for k, v in symptoms.items() if v]
-        confidence = formatted_data.get('confidence', 0.0)
-        
-        # Criteria for adequacy
-        min_symptoms = 2
-        min_confidence = 0.6
-        
-        is_adequate = (
-            len(active_symptoms) >= min_symptoms and
-            confidence >= min_confidence and
-            not formatted_data.get('needs_more_info', False)
-        )
-        
-        assessment = {
-            "is_adequate": is_adequate,
-            "active_symptoms_count": len(active_symptoms),
-            "active_symptoms": active_symptoms,
-            "confidence_level": confidence,
-            "recommendations": []
-        }
-        
-        if not is_adequate:
-            if len(active_symptoms) < min_symptoms:
-                assessment["recommendations"].append("Need more symptom information")
-            if confidence < min_confidence:
-                assessment["recommendations"].append("Need clearer symptom descriptions")
-            if formatted_data.get('needs_more_info', False):
-                assessment["recommendations"].append("Additional information required as indicated")
-        
-        return assessment
+                    found_symptoms.append(symptom)
+                    
+        return found_symptoms
 
 # Global instance
 format_filter_agent = FormatFilterAgent()
-
-if __name__ == "__main__":
-    # Test the format filter agent
-    test_summary = """
-    Patient is a 35-year-old female experiencing fever for 3 days, 
-    persistent cough, severe headache, and extreme fatigue. 
-    She also mentioned feeling nauseous occasionally.
-    """
-    
-    result = format_filter_agent.format_symptoms(test_summary)
-    print("Formatted Data:")
-    print(json.dumps(result, indent=2))
-    
-    assessment = format_filter_agent.assess_information_adequacy(result)
-    print("\nAdequacy Assessment:")
-    print(json.dumps(assessment, indent=2))

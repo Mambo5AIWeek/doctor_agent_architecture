@@ -35,18 +35,20 @@ llm = AzureChatOpenAI(
 search_tool = DuckDuckGoSearchRun()
 
 # Define tools for the evaluation agent
-def medical_model_tool(symptoms_json: str) -> str:
+def medical_model_tool(symptoms_list_json: str) -> str:
     """
-    Call the medical diagnosis model with symptoms data.
+    Call the medical diagnosis model with a list of symptoms.
     
     Args:
-        symptoms_json: JSON string containing symptoms, age, and gender
+        symptoms_list_json: JSON string of a list of symptom names.
     
     Returns:
-        JSON string with diagnosis results
+        JSON string with diagnosis results.
     """
     try:
-        symptoms_data = json.loads(symptoms_json)
+        symptoms_list = json.loads(symptoms_list_json)
+        # The model expects a dictionary, so we convert the list to the required format.
+        symptoms_data = {"symptoms": {symptom: True for symptom in symptoms_list}}
         diagnosis = get_diagnosis(symptoms_data)
         return json.dumps(diagnosis, indent=2)
     except Exception as e:
@@ -73,7 +75,7 @@ tools = [
     Tool(
         name="medical_model",
         func=medical_model_tool,
-        description="Call the medical diagnosis model with symptoms data in JSON format. Input should be a JSON string with symptoms (boolean dict), age, and gender."
+        description="Call the medical diagnosis model with a list of symptoms in JSON format. Input should be a JSON string representing a list of symptom names."
     ),
     Tool(
         name="internet_search",
@@ -140,23 +142,23 @@ class EvaluationAgent:
     def __init__(self):
         self.agent = evaluation_agent
     
-    def evaluate_diagnosis(self, symptoms_data: Dict[str, Any]) -> Dict[str, Any]:
+    def evaluate_diagnosis(self, symptoms_list: List[str]) -> Dict[str, Any]:
         """
-        Evaluate diagnosis based on symptoms data.
+        Evaluate diagnosis based on a list of symptoms.
         
         Args:
-            symptoms_data: Dictionary with symptoms, age, and gender
+            symptoms_list: A list of symptom strings.
             
         Returns:
-            Dictionary with evaluation results and decision
+            Dictionary with evaluation results and decision.
         """
         try:
-            # Convert to JSON for the agent
-            symptoms_json = json.dumps(symptoms_data)
+            # Convert list to JSON for the agent
+            symptoms_json = json.dumps(symptoms_list)
             
             # Create input message
             input_message = f"""
-            Please evaluate the following symptoms data and provide a diagnosis evaluation:
+            Please evaluate the following list of symptoms and provide a diagnosis evaluation:
             
             {symptoms_json}
             
@@ -221,19 +223,3 @@ class EvaluationAgent:
 
 # Global instance
 evaluation_agent_instance = EvaluationAgent()
-
-if __name__ == "__main__":
-    # Test the evaluation agent
-    test_symptoms = {
-        "symptoms": {
-            "fever": True,
-            "cough": True,
-            "headache": True,
-            "fatigue": True
-        },
-        "age": 35,
-        "gender": "female"
-    }
-    
-    result = evaluation_agent_instance.evaluate_diagnosis(test_symptoms)
-    print(json.dumps(result, indent=2))
