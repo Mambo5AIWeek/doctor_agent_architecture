@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from functools import lru_cache
 from pydantic import BaseModel
 from typing import List, Union, Tuple
 import torch
@@ -44,8 +45,8 @@ model = None
 feature_columns = None
 target_columns = None
 
-
-def load_model_and_metadata():
+@lru_cache
+def load_model_and_metadata(llamando: bool):
     global model, feature_columns, target_columns
 
     # Load the trained model
@@ -74,6 +75,7 @@ def load_model_and_metadata():
 
 
 def predict(symptoms: List[str], confidence_threshold: float = 0.0):
+    load_model_and_metadata(True)
     """
     Predice una enfermedad a partir de una lista de síntomas.
     """
@@ -116,30 +118,3 @@ def predict(symptoms: List[str], confidence_threshold: float = 0.0):
         return "No se pudo determinar una enfermedad con suficiente confianza. Por favor, consulte a un médico.", unrecognized_symptoms
 
     return results, unrecognized_symptoms
-
-
-async def startup_event():
-    load_model_and_metadata()
-
-
-async def predict_disease(request: SymptomsRequest):
-    try:
-        if not request.symptoms:
-            raise HTTPException(status_code=400, detail="No symptoms provided")
-
-        predictions, unrecognized = predict(request.symptoms, request.confidence_threshold)
-
-        return PredictionResponse(
-            predictions=predictions,
-            unrecognized_symptoms=unrecognized
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-async def root():
-    return {"message": "Disease Predictor API is running"}
-
-async def health_check():
-    return {"status": "healthy", "model_loaded": model is not None}
