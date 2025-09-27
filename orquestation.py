@@ -20,7 +20,7 @@ import importlib.util
 import sys
 
 # Import fake model
-spec = importlib.util.spec_from_file_location("fake_model", "fake-model.py")
+spec = importlib.util.spec_from_file_location("fake_model", "fake_model.py")
 fake_model = importlib.util.module_from_spec(spec)
 sys.modules["fake_model"] = fake_model
 spec.loader.exec_module(fake_model)
