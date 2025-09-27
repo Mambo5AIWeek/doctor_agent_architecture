@@ -91,12 +91,8 @@ IMPORTANT RULES:
             """)
             
             messages = [system_message, user_message]
-            print("Invoking LLM with messages:")
-            print(messages)
             response = self.llm.invoke(messages)
             response_text = response.content.strip()
-            print("LLM response:")
-            print(response_text)
             
             # Use eval to parse the list string into a Python list
             symptoms = eval(response_text)
