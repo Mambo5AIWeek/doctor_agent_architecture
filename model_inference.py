@@ -1,3 +1,4 @@
+import json
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from functools import lru_cache
@@ -116,5 +117,8 @@ def predict(symptoms: List[str], confidence_threshold: float = 0.0):
 
     if not results:
         return "No se pudo determinar una enfermedad con suficiente confianza. Por favor, consulte a un médico.", unrecognized_symptoms
+
+    store_results_file_json = "predictions.json"
+    json.dump(results, open(store_results_file_json, "w"))
 
     return results, unrecognized_symptoms

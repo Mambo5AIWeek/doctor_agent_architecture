@@ -5,6 +5,7 @@ FastAPI Backend Endpoint - Medical Diagnosis System
 This module provides a REST API endpoint for the medical diagnosis system.
 """
 
+import json
 import os
 import uuid
 from typing import Dict, Any, Optional
@@ -65,6 +66,7 @@ class ChatResponse(BaseModel):
     session_id: str = Field(..., description="Session ID for this conversation")
     conversation_complete: bool = Field(..., description="Whether the diagnosis process is complete")
     timestamp: str = Field(..., description="Response timestamp")
+    predictions: list = Field([], description="List of predicted diseases with confidence scores")
 
 class HealthResponse(BaseModel):
     """Health check response model."""
@@ -192,7 +194,14 @@ async def chat_endpoint(
         )
         
         logger.info(f"Response sent for session {session_id[:8]}... (complete: {conversation_complete})")
-        
+
+        if response.conversation_complete:
+            try:
+                response.predictions = json.loads(open("predictions.json").read())
+            except Exception as e:
+                logger.error(f"Error loading predictions: {str(e)}")
+                response.predictions = []
+
         return response
         
     except Exception as e:
