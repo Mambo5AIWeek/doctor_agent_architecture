@@ -127,19 +127,3 @@ def get_diagnosis(symptoms_data: Dict[str, Any]) -> Dict[str, Any]:
     Convenience function to get diagnosis from the model.
     """
     return medical_model.predict_diagnosis(symptoms_data)
-
-if __name__ == "__main__":
-    # Test the model
-    test_symptoms = {
-        "symptoms": {
-            "fever": True,
-            "cough": True,
-            "headache": True,
-            "fatigue": True
-        },
-        "age": 35,
-        "gender": "female"
-    }
-    
-    result = get_diagnosis(test_symptoms)
-    print(json.dumps(result, indent=2))

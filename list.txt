@@ -37,7 +37,6 @@
  'enlarged_thyroid',
  'excessive_hunger',
  'extra_marital_contacts',
- 'family_history',
  'fast_heart_rate',
  'fatigue',
  'fluid_overload',
